@@ -1,0 +1,47 @@
+[en]
+MAPM_ADM_MENU_TITLE_VOTEMAP = \y[\rVoteMap Menu\y] \wMap list
+MAPM_ADM_MENU_TITLE_CHANGEMAP = \y[\rChangeMap Menu\y] \wMap list 
+MAPM_ADM_MENU_SELECTED_MAPS = \wSelected maps:
+MAPM_ADM_MENU_CREATE_VOTE = Create vote
+MAPM_ADM_MENU_CONFIRM_SELECTION = Confirm selection
+MAPM_ADM_CMD_INVALID_SYNTAX = * Invalid command syntax!
+MAPM_ADM_MAX_ITEMS_IN_VOTE = * Maximum number of maps in vote
+MAPM_ADM_USAGE_EXAMPLE = * Usage example
+MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP = * Cannot be changed to current map
+MAPM_ADM_MAP_NOT_IN_MAPLIST = * Map '%s' missing in maplist
+MAPM_ADM_MAP_ALREADY_IN_VOTELIST = * Map '%s' is already in votelist
+MAPM_ADM_ERR_VOTE_FAILED = * Vote failed!
+MAPM_ADM_ERR_ACCESS_DENIED = * Not enough rights to use command!
+MAPM_ADM_DELAY_CMD = Command will be available through ^4%d:%02d^1.
+MAPM_ADM_VOTE_STARTED = Command unavailable! Vote is already running!
+MAPM_ADM_VOTE_IN_NEXT_ROUND = Command unavailable! Next round will begin vote for a change of map!
+MAPM_ADM_MAP_DEFINED = Command unavailable! Following map is already defined: %s.
+MAPM_ADM_MENU_STATE_SELECT = Command unavailable! %s already choosing %l!
+MAPM_ADM_MAPS = maps
+MAPM_ADM_MAP = map
+MAPM_ADM_STATE_CHANGELEVEL = ^3%s^1 changed current map to %s.
+MAPM_ADM_STATE_CREATE_VOTE = ^3%s^1 created a vote for change of map.
+
+[ru]
+MAPM_ADM_MENU_TITLE_VOTEMAP = \y[\rVoteMap Menu\y] \wСписок карт
+MAPM_ADM_MENU_TITLE_CHANGEMAP = \y[\rChangeMap Menu\y] \wСписок карт
+MAPM_ADM_MENU_SELECTED_MAPS = \wВыбрано карт:
+MAPM_ADM_MENU_CREATE_VOTE = Создать голосование
+MAPM_ADM_MENU_CONFIRM_SELECTION = Подтвердить выбор
+MAPM_ADM_CMD_INVALID_SYNTAX = * Неверный синтаксис команды!
+MAPM_ADM_MAX_ITEMS_IN_VOTE = * Максимальное число карт в голосовании
+MAPM_ADM_USAGE_EXAMPLE = * Пример использования
+MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP = * Нельзя сменить на текущую карту
+MAPM_ADM_MAP_NOT_IN_MAPLIST = * Карта '%s' отсутствует в маплисте
+MAPM_ADM_MAP_ALREADY_IN_VOTELIST = * Карта '%s' уже в списке для голосования
+MAPM_ADM_ERR_VOTE_FAILED = * Голосование не было запущено!
+MAPM_ADM_ACCESS_DENIED = * Недостаточно прав для использования команды!
+MAPM_ADM_CMD_DELAY = Команда будет доступна через ^4%d:%02d^1.
+MAPM_ADM_VOTE_STARTED = Команда недоступна! Голосование уже запущено!
+MAPM_ADM_VOTE_IN_NEXT_ROUND = Команда недоступна! В следующем раунде начнется голосование за смену карты!
+MAPM_ADM_MAP_DEFINED = Команда недоступна! Cледующая карта уже определена: %s.
+MAPM_ADM_MENU_STATE_SELECT = Команда недоступна! %s уже выбирает %l!
+MAPM_ADM_MAPS = карты
+MAPM_ADM_MAP = карту
+MAPM_ADM_CHANGELEVEL = ^3%s^1 сменил текущую карту на %s.
+MAPM_ADM_CREATE_VOTE = ^3%s^1 создал голосование за смену карты.
