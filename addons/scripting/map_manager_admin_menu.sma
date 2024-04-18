@@ -2,12 +2,15 @@
 #include <map_manager>
 #include <map_manager_scheduler>
 
-new const ADMIN_MAPLIST[]   = "admin_maps.ini";       // Map list for menu formation (only map name is indicated in line, without indicating online)
-const FLAG_ACCESS_CHANGEMAP = ADMIN_MAP;              // Flag for access to map change commands
-const FLAG_ACCESS_VOTEMAP   = ADMIN_VOTE;             // Flag for access to commands for creating a vote for a map change
+#pragma semicolon 1
 
-const VOTE_BY_ADMIN_MENU    = 4;
-const MAX_ITEMS_MENU        = 6;
+const ACCESS_CHANGEMAP          = ADMIN_MAP;        // Flag for access to map change commands
+const ACCESS_VOTEMAP            = ADMIN_VOTE;       // Flag for access to commands for creating a vote for a map change
+
+const CHANGE_NEXT_ROUND         = 1;
+const FREEZE_TIME_ENABLED       = 1;
+const VOTE_BY_ADMIN_MENU        = 4;
+const MAX_ITEMS_MENU            = 6;
 
 enum {
     MENU_KEY_CONFIRM = 6, 
@@ -22,7 +25,7 @@ enum {
 };
 
 enum { 
-    STATE_NONE = -1,
+    STATE_NONE,
     STATE_SELECT
 };
 
@@ -36,7 +39,14 @@ enum Data {
 
 enum Cvars {
     NEXTMAP,
+    FREEZETIME,
+    VOTE_IN_NEW_ROUND,
     LAST_ROUND,
+    PREPARE_TIME,
+    VOTE_TIME,
+    FREEZE_IN_VOTE,
+    CHATTIME,
+    MAPLIST,
     DELAY,
 };
 
@@ -49,6 +59,7 @@ new Array:MainMapList;
 new LoadedMaps, VoteItems;
 
 new Menu[Data];
+
 new EventNewRound;
 
 new CurrentMap[MAPNAME_LENGTH];
@@ -62,22 +73,21 @@ new MapStartTime;
 #endif
 
 #define get_num(%0)             get_pcvar_num(Pcvar[%0])
-// #define set_num(%0,%1)          set_pcvar_num(Pcvar[%0],%1)
-// #define get_float(%0)           get_pcvar_float(Pcvar[%0])
-// #define set_float(%0,%1)        set_pcvar_float(Pcvar[%0],%1)
+#define get_float(%0)           get_pcvar_float(Pcvar[%0])
+#define set_float(%0,%1)        set_pcvar_float(Pcvar[%0],%1)
 #define get_string(%0,%1,%2)    get_pcvar_string(Pcvar[%0],%1,%2)
 #define set_string(%0,%1)       set_pcvar_string(Pcvar[%0],%1)
 
 public plugin_init()
 {
-    register_plugin("Map Manager: Admin menu", "0.6.1", "d3m37r4");
+    register_plugin("Map Manager: Admin menu", "0.6.2", "d3m37r4");
 
     registerCommands();
     registerCommandsForBlocking();
     registerDictionaryFiles();
     registerCvars();
 
-    register_menucmd(Menu[INDEX] = register_menuid("AdminMapMenu"), 1023, "handlerAdminMapMenu");
+    register_menucmd(Menu[INDEX] = register_menuid("AdminMapMenu"), 1023, "handleAdminMapMenu");
     disable_event(EventNewRound = register_event("HLTV", "eventNewRound", "a", "1=0", "2=0"));
 
     MapStartTime = get_systime();
@@ -88,14 +98,13 @@ public plugin_cfg()
     MapList = ArrayCreate(MAPNAME_LENGTH);
     VoteList = ArrayCreate(MAPNAME_LENGTH);
 
-    new filename[32];
-    copy(filename, charsmax(filename), ADMIN_MAPLIST);
+    new file[32];
+    get_string(MAPLIST, file, charsmax(file));
 
-    if(!mapm_load_maplist_to_array(MapList, filename)) {
-        ArrayDestroy(MapList);
-        ArrayDestroy(VoteList);
-
-        set_fail_state("Nothing loaded from '%s'", filename);
+    if(!file[0]) {
+        loadMapsFromDir("maps", MapList);
+    } else {
+        loadMapsFromFile(file, MapList);
     }
 
     if(MapList) {
@@ -103,10 +112,21 @@ public plugin_cfg()
     }
 
     Pcvar[NEXTMAP] = get_cvar_pointer("amx_nextmap");
+    Pcvar[FREEZETIME] = get_cvar_pointer("mp_freezetime");
+    Pcvar[VOTE_IN_NEW_ROUND] = get_cvar_pointer("mapm_vote_in_new_round");
     Pcvar[LAST_ROUND] = get_cvar_pointer("mapm_last_round");
+    Pcvar[PREPARE_TIME] = get_cvar_pointer("mapm_prepare_time");
+    Pcvar[VOTE_TIME] = get_cvar_pointer("mapm_vote_time");
+    Pcvar[FREEZE_IN_VOTE] = get_cvar_pointer("mapm_freeze_in_vote");
+    Pcvar[CHATTIME] = get_cvar_pointer("mp_chattime");
 
     get_mapname(CurrentMap, charsmax(CurrentMap));
     mapm_get_prefix(Prefix, charsmax(Prefix));
+}
+
+public plugin_end()
+{
+    restoreFreezeTime();
 }
 
 public clcmdSay(const id)
@@ -129,7 +149,7 @@ public clcmdSay(const id)
     return PLUGIN_CONTINUE;
 }
 
-public commandBlocked(const id)
+public cmdBlocked(const id)
 {
     return bool:(is_vote_started() || is_vote_finished() || is_vote_will_in_next_round()) ? PLUGIN_HANDLED : PLUGIN_CONTINUE;
 }
@@ -151,12 +171,12 @@ public concmdChangeMap(const id, const flags)
     read_argv(1, mapname, charsmax(mapname));
 
     if(equali(mapname, CurrentMap)) {
-        console_print(id, "%l!", "MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP");
+        console_print(id, "%l", "MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP");
 
         return PLUGIN_HANDLED;
     }
 
-    if(!arrayContainsMap(mapname, MainMapList) && !arrayContainsMap(mapname, MapList)) {
+    if(!arrayContainsMap(MainMapList, mapname) && !arrayContainsMap(MapList, mapname)) {
         console_print(id, "%l", "MAPM_ADM_MAP_NOT_IN_MAPLIST", mapname);
 
         return PLUGIN_HANDLED;
@@ -195,19 +215,19 @@ public concmdVoteMap(const id, const flags)
         }
 
         if(equali(mapname, CurrentMap)) {
-            console_print(id, "%l (arg #%d)!", "MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP", i + 1);
+            console_print(id, "%l (arg #%d)", "MAPM_ADM_CANT_BE_CHANGET_TO_THE_CURRENT_MAP", i + 1);
 
             continue;
         }
 
-        if(!arrayContainsMap(mapname, MainMapList) && !arrayContainsMap(mapname, MapList)) {
-            console_print(id, "%l (arg #%d)!", "MAPM_ADM_MAP_NOT_IN_MAPLIST", mapname, i + 1);
+        if(!arrayContainsMap(MainMapList, mapname) && !arrayContainsMap(MapList, mapname)) {
+            console_print(id, "%l (arg #%d)", "MAPM_ADM_MAP_NOT_IN_MAPLIST", mapname, i + 1);
 
             continue;
         }
         
-        if(arrayContainsMap(mapname, VoteList)) {
-            console_print(id, "%l (arg #%d)!", "MAPM_ADM_MAP_ALREADY_IN_VOTELIST", mapname, i + 1);
+        if(arrayContainsMap(VoteList,  mapname)) {
+            console_print(id, "%l (arg #%d)", "MAPM_ADM_MAP_ALREADY_IN_VOTELIST", mapname, i + 1);
 
             continue;
         }
@@ -216,7 +236,7 @@ public concmdVoteMap(const id, const flags)
         VoteItems++;
     }
 
-    VoteItems ? StartVote(id) : console_print(id, "%l", "MAPM_ADM_ERR_VOTE_FAILED");
+    VoteItems ? createVoteMap(id) : console_print(id, "%l", "MAPM_ADM_ERR_VOTE_FAILED");
 
     return PLUGIN_HANDLED;  
 }
@@ -274,11 +294,11 @@ showAdminMapMenu(const id, const menuid)
         Menu[TYPE] = menuid;
         Menu[USER] = id;
         Menu[STATE] = STATE_SELECT;
-        ShowMapMenu(id);
+        renderAdminMapMenu(id);
     }
 }
 
-ShowMapMenu(const id, const page = 0)
+renderAdminMapMenu(const id, const page = 0)
 {
     new start, end;
     new current = getCurrentMenuPage(page, LoadedMaps, MAX_ITEMS_MENU, start, end);
@@ -291,7 +311,7 @@ ShowMapMenu(const id, const page = 0)
     new len = formatex(menu, charsmax(menu), "%l", Menu[TYPE] == VOTEMAP ? "MAPM_ADM_MENU_TITLE_VOTEMAP" : "MAPM_ADM_MENU_TITLE_CHANGEMAP");
 
     len += formatex(menu[len], charsmax(menu) - len, " \y%d/%d^n", current + 1, pages + 1);
-    len += formatex(menu[len], charsmax(menu) - len, "%l \y%d/%d^n^n", "MMAPM_ADM_MENU_SELECTED_MAPS", VoteItems, max_items);
+    len += formatex(menu[len], charsmax(menu) - len, "%l \y%d/%d^n^n", "MAPM_ADM_MENU_SELECTED_MAPS", VoteItems, max_items);
 
     new keys = MENU_KEY_0;
 
@@ -299,7 +319,7 @@ ShowMapMenu(const id, const page = 0)
         ArrayGetString(MapList, i, mapname, charsmax(mapname));
 
         keys |= (1 << item);
-        len += formatex(menu[len], charsmax(menu) - len, arrayContainsMap(mapname, VoteList) ?
+        len += formatex(menu[len], charsmax(menu) - len, arrayContainsMap(VoteList, mapname) ?
         "\d%d. %s \y[\r*\y]^n" : "\r%d. \w%s^n", ++item, mapname);
     }
 
@@ -334,24 +354,24 @@ ShowMapMenu(const id, const page = 0)
     show_menu(id, keys, menu, -1, "AdminMapMenu");
 }
 
-public handlerAdminMapMenu(const id, const key)
+public handleAdminMapMenu(const id, const key)
 {
     new max_items = (Menu[TYPE] == VOTEMAP) ? mapm_get_votelist_size() : 1;
 
     switch(key) {
         case MENU_KEY_CONFIRM: {
             if(Menu[TYPE] == VOTEMAP) {
-                StartVote(id);             
+                createVoteMap(id);             
             } else {
                 ArrayGetString(VoteList, 0, NextMap, charsmax(NextMap));
                 changeMap(id, NextMap);
             }
         }
         case MENU_KEY_BACK: {
-            ShowMapMenu(id, --Menu[POS]);
+            renderAdminMapMenu(id, --Menu[POS]);
         }
         case MENU_KEY_NEXT: {
-            ShowMapMenu(id, ++Menu[POS]);
+            renderAdminMapMenu(id, ++Menu[POS]);
         }
         case MENU_KEY_EXIT: {
             resetData();
@@ -360,7 +380,8 @@ public handlerAdminMapMenu(const id, const key)
             new mapname[MAPNAME_LENGTH];
             ArrayGetString(MapList, Menu[POS] * MAX_ITEMS_MENU + key, mapname, charsmax(mapname));
 
-            new map_index = ArrayFindString(VoteList, mapname);
+            new map_index = getMapFromArray(VoteList, mapname);
+
             if(map_index == INVALID_MAP_INDEX) {
                 if(VoteItems != max_items) {
                     ArrayPushString(VoteList, mapname);
@@ -371,7 +392,7 @@ public handlerAdminMapMenu(const id, const key)
                 VoteItems--;
             }
            
-            ShowMapMenu(id, Menu[POS]);
+            renderAdminMapMenu(id, Menu[POS]);
         }
     }
 }
@@ -393,12 +414,33 @@ public mapm_prepare_votelist(type)
         return;
     }
 
+    changeFreezeTime();
+
     for(new i, mapname[MAPNAME_LENGTH]; i < VoteItems; i++) {
         ArrayGetString(VoteList, i, mapname, charsmax(mapname));
         mapm_push_map_to_votelist(mapname, PUSH_BY_NATIVE, CHECK_IGNORE_MAP_ALLOWED);
     }
 
     mapm_set_votelist_max_items(VoteItems);
+    resetData();
+}
+
+public mapm_vote_finished(const map[], type, total_votes)
+{
+    if(type != VOTE_BY_ADMIN_MENU) {
+        return;
+    }
+
+    restoreFreezeTime();
+}
+
+public mapm_vote_canceled(type)
+{
+    if(type != VOTE_BY_ADMIN_MENU) {
+        return;
+    }
+
+    restoreFreezeTime();
     resetData();
 }
 
@@ -471,14 +513,14 @@ changeMap(const index, mapname[]) {
         enable_event(EventNewRound);
         client_print_color(0, print_team_default, "%s ^1%l", Prefix, "MAPM_CHANGELEVEL_NEXTROUND");
     } else {
-        // client_print_color(0, print_team_default, "%s^1 %L^1 %L.", g_sPrefix, LANG_PLAYER, "MAPM_MAP_CHANGE", get_num(CHATTIME), LANG_PLAYER, "MAPM_SECONDS");
+        client_print_color(0, print_team_default, "%s ^1%l %l.", Prefix, "MAPM_MAP_CHANGE", get_num(CHATTIME), "MAPM_SECONDS");
         intermission();
     }
 
     log_amx("Map change was started by %n", index);
 }
 
-StartVote(const index) {
+createVoteMap(const index) {
     new name[MAX_NAME_LENGTH];
     get_user_name(index, name, charsmax(name));
 
@@ -490,11 +532,11 @@ StartVote(const index) {
 
 registerCommands()
 {
-    register_concmd("amx_changemap", "concmdChangeMap", FLAG_ACCESS_CHANGEMAP);
-    register_clcmd("amx_changemap_menu", "clcmdChangeMapMenu", FLAG_ACCESS_CHANGEMAP);
+    register_concmd("amx_changemap", "concmdChangeMap", ACCESS_CHANGEMAP);
+    register_clcmd("amx_changemap_menu", "clcmdChangeMapMenu", ACCESS_CHANGEMAP);
 
-    register_concmd("amx_votemap", "concmdVoteMap", FLAG_ACCESS_VOTEMAP);
-    register_clcmd("amx_votemap_menu", "clcmdVoteMapMenu", FLAG_ACCESS_VOTEMAP);
+    register_concmd("amx_votemap", "concmdVoteMap", ACCESS_VOTEMAP);
+    register_clcmd("amx_votemap_menu", "clcmdVoteMapMenu", ACCESS_VOTEMAP);
 }
 
 registerCommandsForBlocking()
@@ -502,10 +544,10 @@ registerCommandsForBlocking()
     register_clcmd("say", "clcmdSay");
     register_clcmd("say_team", "clcmdSay");
 
-    register_clcmd("say rtv", "commandBlocked");
-    register_clcmd("say /rtv", "commandBlocked");
-    register_clcmd("say maps", "commandBlocked");
-    register_clcmd("say /maps", "commandBlocked");
+    register_clcmd("say rtv", "cmdBlocked");
+    register_clcmd("say /rtv", "cmdBlocked");
+    register_clcmd("say maps", "cmdBlocked");
+    register_clcmd("say /maps", "cmdBlocked");
 }
 
 registerDictionaryFiles()
@@ -519,6 +561,11 @@ registerDictionaryFiles()
 
 registerCvars()
 {
+    Pcvar[MAPLIST] = create_cvar(
+        .name = "mapm_admin_menu_maplist", 
+        .string = "maps.ini",
+        .flags = FCVAR_SERVER
+    );
     Pcvar[DELAY] = create_cvar(
         .name = "mapm_admin_menu_delay", 
         .string = "1",
@@ -587,9 +634,68 @@ bool:mapCanBeNominated(mapname[])
     return false;
 }
 
-bool:arrayContainsMap(mapname[], Array:array)
+bool:arrayContainsMap(Array:which, mapname[])
 {
-    return bool:(ArrayFindString(array, mapname) != INVALID_MAP_INDEX);
+    return bool:(getMapFromArray(which, mapname) != INVALID_MAP_INDEX);
+}
+
+getMapFromArray(Array:which, mapname[])
+{
+    static buffer[MAPNAME_LENGTH];
+
+    for(new item, size = ArraySize(which); item < size; item++) {
+        ArrayGetString(which, item, buffer, charsmax(buffer));
+
+        if(equali(mapname, buffer)) {
+            return item;
+        }
+    }
+
+    return INVALID_MAP_INDEX;
+}
+
+loadMapsFromDir(dirname[], Array:which)
+{
+    static file[32], dir;
+
+    dir = open_dir(dirname, file, charsmax(file));
+
+    if(dir) {
+        do {
+            valid_map(file) && ArrayPushArray(which, file);
+        } while (next_file(dir, file, charsmax(file)));
+
+        close_dir(dir);
+    }
+
+    if(!ArraySize(which)) {
+        set_fail_state("Nothing loaded from dir '%s'.", dirname);
+    }
+}
+
+loadMapsFromFile(filename[], Array:which)
+{
+    if(!mapm_load_maplist_to_array(which, filename)) {
+        set_fail_state("Nothing loaded from file '%s'.", filename);
+    }
+}
+
+changeFreezeTime()
+{
+    if(get_num(FREEZE_IN_VOTE) != FREEZE_TIME_ENABLED || !get_num(VOTE_IN_NEW_ROUND)) {
+        return;
+    }
+    
+    set_float(FREEZETIME, get_float(FREEZETIME) + get_float(PREPARE_TIME) + get_float(VOTE_TIME) + 1);
+}
+
+restoreFreezeTime()
+{
+    if(get_num(FREEZE_IN_VOTE) != FREEZE_TIME_ENABLED) {
+        return;
+    }
+    
+    set_float(FREEZETIME, get_float(FREEZETIME) - get_float(PREPARE_TIME) - get_float(VOTE_TIME) - 1);
 }
 
 stock consolePrintEx(index, message[], any:...)
