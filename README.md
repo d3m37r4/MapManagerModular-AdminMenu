@@ -6,5 +6,5 @@ Plugin addon for [MapManager Modular](https://github.com/Mistrick/MapManagerModu
 ## Requirements
 - HLDS installed
 - Installed AMXModX ([`v1.9`](https://www.amxmodx.org/downloads-new.php) or [`v1.10`](https://www.amxmodx.org/downloads-new.php?branch=master))
-- Installed MapManager Modular ([`v3.2.0`](https://github.com/Mistrick/MapManagerModular/releases/latest) or higher
+- Installed MapManager Modular ([`v3.2.0`](https://github.com/Mistrick/MapManagerModular/releases/latest) or higher)
 
