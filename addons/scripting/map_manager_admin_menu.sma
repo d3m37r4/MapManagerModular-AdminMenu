@@ -80,7 +80,7 @@ new MapStartTime;
 
 public plugin_init()
 {
-    register_plugin("Map Manager: Admin menu", "0.6.2", "d3m37r4");
+    register_plugin("Map Manager: Admin menu", "0.6.3", "d3m37r4");
 
     registerCommands();
     registerCommandsForBlocking();
@@ -399,7 +399,7 @@ public handleAdminMapMenu(const id, const key)
 
 public eventNewRound()
 {
-    client_print_color(0, print_team_default, "%s ^1%l", Prefix, "MAPM_NEXTMAP", NextMap);
+    client_print_color(0, print_team_default, "%s ^1%l %s^1.", Prefix, "MAPM_NEXTMAP", NextMap);
     intermission();
 }
 
